@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #FAF6F0;
+    color: #2C241E;
+  }
+
+  h1, h2, .font-display {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+}
+
+@keyframes gentle-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
+@keyframes dough-rise {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1.04, 1.07); }
+}
+
+@keyframes steam-float {
+  0% { opacity: 0.2; transform: translateY(4px); }
+  50% { opacity: 0.7; transform: translateY(-4px); }
+  100% { opacity: 0.2; transform: translateY(-10px); }
+}
+
+.animate-dough-rise {
+  animation: dough-rise 3s ease-in-out infinite;
+}
+
+.animate-steam {
+  animation: steam-float 2.4s ease-in-out infinite;
+}
