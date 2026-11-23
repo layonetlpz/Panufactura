@@ -1,5 +1,5 @@
 import React from 'react';
-import { Html } from '@react-three/drei';
+import { Billboard, Text } from '@react-three/drei';
 import { HotspotInfo, MACHINES_INFO } from './simulationConfig';
 
 interface Props {
@@ -25,32 +25,59 @@ export const InteractionManager: React.FC<Props> = ({
 
   return (
     <group>
-      {machine.hotspots.map((hs) => {
+      {machine.hotspots.map((hs, idx) => {
         const isOpen = activeHotspotId === hs.id;
+        const badgeWidth = Math.max(0.66, hs.label.length * 0.044 + 0.22);
         return (
-          <Html key={hs.id} position={hs.position} center distanceFactor={10} zIndexRange={[10, 0]}>
-            <div className="relative flex flex-col items-center pointer-events-auto">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelectHotspot(isOpen ? null : hs);
-                }}
-                className={`px-2 py-0.5 rounded-full text-[11px] font-bold shadow-md border transition cursor-pointer whitespace-nowrap ${
-                  isOpen
-                    ? 'bg-amber-600 text-white border-amber-300 scale-105'
-                    : 'bg-[#1E293B]/90 text-amber-200 border-amber-400/50 hover:bg-amber-600 hover:text-white'
-                }`}
+          <Billboard
+            key={hs.id}
+            position={[hs.position[0], hs.position[1] + 0.11, hs.position[2]]}
+            follow={true}
+          >
+            <group
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectHotspot(isOpen ? null : hs);
+              }}
+            >
+              {/* Connecting pin stem */}
+              <mesh position={[0, -0.085, 0]}>
+                <cylinderGeometry args={[0.005, 0.005, 0.13, 8]} />
+                <meshBasicMaterial color={isOpen ? '#F4D06F' : '#C87D20'} />
+              </mesh>
+              <mesh position={[0, -0.15, 0]}>
+                <sphereGeometry args={[0.02, 12, 12]} />
+                <meshBasicMaterial color={isOpen ? '#F4D06F' : '#C87D20'} />
+              </mesh>
+
+              {/* Pill background */}
+              <mesh position={[0, 0, 0]}>
+                <planeGeometry args={[badgeWidth, 0.155]} />
+                <meshBasicMaterial
+                  color={isOpen ? '#C87D20' : '#14181F'}
+                  transparent
+                  opacity={0.92}
+                />
+              </mesh>
+              {/* Pill border */}
+              <mesh position={[0, 0, -0.002]}>
+                <planeGeometry args={[badgeWidth + 0.02, 0.175]} />
+                <meshBasicMaterial color={isOpen ? '#F4D06F' : '#C87D20'} />
+              </mesh>
+
+              {/* Hotspot Label Text */}
+              <Text
+                position={[0, 0, 0.01]}
+                fontSize={0.062}
+                color="#FFFFFF"
+                anchorX="center"
+                anchorY="middle"
+                fontWeight="bold"
               >
-                • {hs.label}
-              </button>
-              {isOpen && (
-                <div className="mt-1.5 w-52 rounded-lg bg-[#1E293B]/95 text-white p-2.5 text-[11px] shadow-xl border border-amber-400/40">
-                  <div className="font-bold text-amber-300 mb-0.5">{hs.label}</div>
-                  <p className="text-slate-200 leading-snug">{hs.description}</p>
-                </div>
-              )}
-            </div>
-          </Html>
+                {`${idx + 1}. ${hs.label}`}
+              </Text>
+            </group>
+          </Billboard>
         );
       })}
     </group>

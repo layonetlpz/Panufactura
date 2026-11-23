@@ -1,169 +1,56 @@
-# PANUFACTURA — Simulador Interactivo del Proceso de Manufactura del Pan
+# PANUFACTURA 3.0 — Simulador Industrial 3D de Manufactura del Pan
 
-Aplicación web interactiva con motor gráfico 3D en tiempo real para la enseñanza, visualización y análisis desde la **Ingeniería Industrial** del proceso de manufactura del **pan de sal tradicional tipo rollo (estilo pan blandito colombiano, sin relleno)**.
-
----
-
-## 1. Descripción del proyecto
-
-**PANUFACTURA** modela el ciclo completo de fabricación en una panadería artesanal/semi-industrial, integrando operaciones unitarias, transformación reológica y térmica de la masa, control estadístico e inocuidad alimentaria (BPM / HACCP), formulación por porcentaje panadero y un entorno 3D interactivo construido con **Three.js / React Three Fiber (WebGL 2)**.
+Plataforma interactiva de simulación tridimensional en tiempo real (**Three.js + React Three Fiber + WebGL 2**) y laboratorio de ingeniería de procesos para el estudio integral de la manufactura del **pan de sal tradicional tipo rollo (estilo pan blandito colombiano, sin relleno)**.
 
 ---
 
-## 2. Objetivo académico
+## 1. Características principales del Motor 3D Industrial
 
-Servir como herramienta interactiva de apoyo para la asignatura de **Procesos de Manufactura**, permitiendo:
-- Comprender las **18 fases secuenciales** desde la recepción de materias primas hasta la distribución del producto terminado.
-- Analizar la relación entre **variables operativas** (temperatura, tiempo, humedad relativa, velocidad de amasado) y los atributos de calidad del pan.
-- Identificar **equipos, puntos críticos de control (PCC), defectos potenciales y mejoras de Ingeniería Industrial** (layout, balanceo, SMED, Poka-Yoke).
-
----
-
-## 3. Características principales
-
-- **Visor 3D en tiempo real (WebGL 2)** con iluminación física, sombras suaves, pisos epóxicos, estanterías, máquinas detalladas y cámara orbital con presets por estación.
-- **Transformación continua de la masa en 3D:** desde ingredientes secos e hidratación, desarrollo de red de gluten, fermentación en bloque y cámara de fermentación, división en porciones, formado en rollos, horneado con *oven spring* y reacción de Maillard, hasta enfriamiento, empaque y distribución.
-- **Efectos de simulación procedurales:** partículas de harina, vapor de fermentación, calor/convección en horno y flujo de aire en enfriamiento.
-- **10 vistas especializadas:** Dashboard, Recorrido 3D del Proceso, Simulador de Variables, Formulación Piloto, Equipos y Maquinaria, Control de Calidad e Inocuidad, Diagrama de Flujo, Control de Lotes, Modo Presentación y Quiz de Evaluación.
-
----
-
-## 4. Funcionamiento del simulador
-
-El usuario puede navegar por las 18 fases en modo **Recorrido Guiado** o **Modo Presentación**, inspeccionar cada máquina haciendo clic directamente en la escena 3D (`InteractionManager`), alternar ángulos de cámara (`CameraController`) y ajustar parámetros críticos en el **Simulador de Variables** para observar el impacto técnico sobre volumen, miga, corteza y vida útil.
+- **Modelado industrial multi-componente y articulado (`src/engine3d/machines/PlantMachines.tsx`):**
+  - **Recepción y almacén PEPS:** sacos textiles de 50 kg con geometría deformada orgánica (`createDeformedSackGeometry`), costuras y caída gravitacional sobre estibas de madera, báscula de plataforma de piso con columna digital, estantería metálica PEPS con arriostramiento diagonal y termohigrómetro mural (`21.4 °C · 58% HR`).
+  - **Dosificación gravimétrica:** mesa inoxidable con salpicadero sanitario, báscula digital con botonera táctil y pantalla LCD reactiva que incrementa el peso en vivo (`0 g → 1.000 g harina → +580 g agua → 1.693 g lote`), tamiz rotatorio con malla y manivela articulada, y micro-balanza de precisión.
+  - **Amasadora industrial de espiral:** bastidor con rejillas de ventilación del motor, patas niveladoras, guarda metálica articulada con microinterruptor de seguridad, artesa inoxidable giratoria sobre rodillos de fricción, barra rompe-masa y **gancho helicoidal 3D (`TubeGeometry`)** con consola electrónica de 2 velocidades y parada de emergencia tipo hongo.
+  - **Cámara de fermentación controlada:** gabinete térmico hueco con puerta abatible de cristal templado, bisagras de barril, carro interior de 10 niveles, cuba humidificadora con resistencias sumergidas y controlador digital PID (`T / % HR`).
+  - **Línea de división, boleado y formado:** divisora hidráulica con palanca articulada y cabezal con cuadrícula de cuchillas en acero inoxidable; **boleadora cónica con canaleta helicoidal 3D** y dosificador superior de harina; mesa de formado con cubierta de arce y **formadora laminadora de doble rodillo contrarrotante**.
+  - **Horno industrial de convección forzada:** cámara hueca con aislamiento térmico, puerta de doble cristal articulada con manija de cierre, **2 turbinas posteriores de convección giratorias**, resistencias incandescentes, campana extractora, panel PID y torreta luminosa de estado.
+  - **Enfriamiento, inspección de miga, empaque y despacho:** carro escabiladero móvil con ruedas y frenos de pedal, turbina de ventilación limpia, estación luminosa de control de calidad con termómetro de punzón, **selladora térmica por impulso con mordaza articulada y cabezal etiquetador automático**, canastillas azules PEPS y furgón de reparto con puertas traseras abatibles.
+- **Geometría orgánica de la masa y del Pan Rollo Colombiano (`src/engine3d/models/OrganicGeometries.ts`, `DoughModel.tsx`):**
+  - Masa en bloque de alta resolución (`48×36`) con deformación viscoelástica y base de contacto plana.
+  - Modelo 3D específico del **pan de sal tradicional tipo rollo** con 4 pliegues de enrollado cilíndrico, puntas cónicas, base de cocción plana, textura PBR de corteza dorada Maillard (`createBreadCrustTexture`) y **vista de corte transversal (`Corte Miga`)** que expone la estructura interna de alvéolos irregulares (`createCrumbAlveoliTexture`).
+- **Control cinemático por sub-fases (`0.00 – 1.00`), 7 cámaras y 4 niveles gráficos:**
+  - Línea de tiempo con *scrubbing* continuo en cualquier instante de la operación, velocidades **`0.25x`, `0.5x`, `1x`, `2x`, `4x`** y desglose de micro-operaciones mecánicas.
+  - **7 perspectivas de cámara:** `Estación`, `Seguimiento` (acompaña el desplazamiento del producto), `Detalle`, `Interior`, `General`, `Superior` y `Lateral`.
+  - **4 niveles de calidad gráfica:** `ULTRA` (PBR + sombras de contacto), `HIGH`, `MEDIUM` y `LOW`, con telemetría de FPS en tiempo real y modo **`Vista Limpia`**.
 
 ---
 
-## 5. Fases de manufactura simuladas
+## 2. Módulos integrados de la plataforma
 
-1. Recepción de materias primas
-2. Almacenamiento de insumos
-3. Dosificación y pesaje (porcentaje panadero)
-4. Tamizado de secos
-5. Mezclado inicial e hidratación
-6. Amasado intensivo (desarrollo de gluten)
-7. Fermentación en bloque (primera fermentación)
-8. División de la masa
-9. Boleado / preformado
-10. Reposo intermedio
-11. Formado tipo rollo y latas
-12. Fermentación final (cámara de crecimiento)
-13. Barnizado / acondicionamiento previo al horno
-14. Horneado (gelatinización, *oven spring*, Maillard)
-15. Desmolde y enfriamiento en rejillas
-16. Inspección de calidad final
-17. Empaque y sellado
-18. Almacenamiento y distribución
+1. **Inicio (`DashboardView.tsx`):** portada editorial *"Del trigo al proceso industrial"* con visor 3D en vivo y panel de continuidad de las 18 fases.
+2. **Simulación 3D (`ProcessTourView.tsx`):** entorno principal de planta tridimensional con control cinemático, corte de miga, 7 cámaras y ficha de ingeniería en 6 pestañas.
+3. **Modo Exposición (`PresentationModeView.tsx`):** interfaz de aula para proyector con visor 3D expandido y control por teclado (`←`, `→`, `Espacio`, `Esc`).
+4. **Análisis de Variables (`VariablesSimView.tsx`):** laboratorio paramétrico de 7 variables con matriz comparativa (*Referencia Piloto vs. Condición Modificada*) y respuesta 3D en vivo.
+5. **Formulación (`FormulationView.tsx`):** calculadora profesional de porcentaje panadero (`Harina = 100%`, masa total `169,3%`) con transferencia directa a Control de Producción.
+6. **Maquinaria y Equipos (`EquipmentView.tsx`):** catálogo técnico de 10 equipos con esquemas vectoriales SVG, componentes, variables, seguridad LOTO y mantenimiento.
+7. **Calidad e Inocuidad (`QualityView.tsx`):** marco normativo (BPM Res. 2674/2013, HACCP Decreto 60/2002), controles en 10 áreas y matriz visual de 11 defectos.
+8. **Diagrama de Flujo (`FlowDiagramView.tsx`):** secuencia ASME interactiva con zoom (`75% – 130%`), 4 nodos de decisión e inspector lateral.
+9. **Control de Producción (`BatchControlView.tsx`):** trazabilidad de lote simulado con bitácora de incidencias y persistencia en `localStorage`.
+10. **Evaluación (`QuizView.tsx`):** cuestionario de 12 preguntas organizado en 8 ejes temáticos.
 
 ---
 
-## 6. Tecnologías utilizadas
-
-- **Frontend:** React 19 (`react`, `react-dom`), TypeScript (`~5.7.2`)
-- **Empaquetador y estilos:** Vite 6 (`vite`, `@vitejs/plugin-react`), Tailwind CSS v4 (`@tailwindcss/vite`)
-- **Motor Gráfico 3D:** Three.js (`^0.172.0`), React Three Fiber (`@react-three/fiber` `^9.0.0`), Drei (`@react-three/drei` `^10.0.0`), WebGL 2
-- **Iconografía:** `lucide-react` (`^0.468.0`)
-
----
-
-## 7. Arquitectura del motor gráfico 3D (`src/engine3d/`)
-
-- `GraphicsEngine.tsx`: Canvas principal, configuración WebGL 2, sombras y fallback de contexto (`GraphicsFallback.tsx`).
-- `simulationConfig.ts`: Mapeo de las 18 fases a estaciones, posiciones de cámara, estado de la masa y parámetros visuales.
-- `materials.ts`: Materiales PBR (`MeshStandardMaterial`, `MeshPhysicalMaterial`) y texturas procedurales.
-- `BakeryLighting.tsx` & `BakeryEnvironment.tsx`: Iluminación industrial, piso epóxico, paredes, mesas en acero inoxidable y entorno de planta.
-- `machines/PlantMachines.tsx`: Modelos 3D procedurales de amasadora, divisora, cámara de fermentación, horno rotativo/convección, mesas de formado, rejillas y empaque.
-- `DoughModel.tsx`: Geometría y sombreado dinámico de la masa según la fase activa.
-- `SimulationEffects.tsx`: Sistemas de partículas e indicadores térmicos/higrométricos.
-- `CameraController.tsx` & `InteractionManager.tsx`: Transiciones suaves de cámara y selección interactiva de equipos.
-
----
-
-## 8. Estructura de carpetas
-
-```text
-app/
-├── docs/
-│   ├── arquitectura.md
-│   ├── fuentes_y_referencias.md
-│   └── Diagrama_Flujo_Manufactura_Pan.svg
-├── src/
-│   ├── components/         # Componentes reutilizables e ilustraciones
-│   ├── data/               # Datos técnicos de fases, formulación, equipos, calidad y quiz
-│   ├── engine3d/           # Motor gráfico 3D (Three.js / R3F / WebGL 2)
-│   │   └── machines/       # Modelos 3D de maquinaria industrial
-│   ├── views/              # Vistas principales de la aplicación
-│   ├── App.tsx
-│   ├── main.tsx
-│   └── index.css
-├── index.html
-├── package.json
-├── package-lock.json
-├── tsconfig.json
-└── vite.config.ts
-```
-
----
-
-## 9. Requisitos del sistema
-
-- **Node.js:** v18.0 o superior (recomendado v20 LTS o v22 LTS)
-- **npm:** v9.0 o superior
-- **Navegador:** Chrome, Edge, Firefox o Brave moderno con soporte **WebGL 2** y aceleración por hardware habilitada.
-
----
-
-## 10. Instalación
+## 3. Instalación, desarrollo y compilación
 
 ```bash
-git clone https://github.com/layonetlpz/Panufactura.git
-cd Panufactura
 npm install
-```
-
-> **Nota sobre Google Drive / unidades virtuales en Windows:** Si clonas o ejecutas el proyecto dentro de una unidad virtualizada (como `G:\Mi unidad\...` de Google Drive Desktop), `npm install` puede fallar con errores `EBADF` al crear enlaces o extraer paquetes. Se recomienda clonar y trabajar en un disco local **NTFS** (por ejemplo, `C:\Proyectos\Panufactura`).
-
----
-
-## 11. Configuración
-
-La aplicación funciona de forma autónoma sin variables de entorno ni backend externo. Todas las configuraciones de simulación se encuentran tipadas en `src/engine3d/simulationConfig.ts` y `src/data/`.
-
----
-
-## 12. Ejecución en modo desarrollo
-
-```bash
 npm run dev
 ```
 
-Abre en el navegador la URL local indicada por Vite (por defecto `http://localhost:5173`).
-
----
-
-## 13. Compilación para producción
+Para verificar tipos de TypeScript y generar la compilación de producción:
 
 ```bash
+npx tsc -b
 npm run build
 ```
 
-Para previsualizar el bundle compilado en `dist/`:
-
-```bash
-npm run preview
-```
-
----
-
-## 14. Solución de problemas comunes
-
-- **Pantalla en blanco o error de WebGL:** Verifica que tu navegador tenga habilitada la aceleración por hardware y soporte WebGL 2. La aplicación incluye `GraphicsFallback.tsx` para informar si el contexto 3D no está disponible.
-- **Error `EBADF` en `npm install` (Windows):** Mueve el repositorio a una ruta local NTFS estándar fuera de carpetas sincronizadas en la nube (Google Drive / OneDrive bajo demanda).
-- **Error de tipos al compilar:** Ejecuta `npx tsc -b` para verificar la integridad de TypeScript antes de `vite build`.
-
----
-
-## 15. Equipo / Autor
-
-Proyecto académico desarrollado para la asignatura de **Procesos de Manufactura** (Ingeniería Industrial).
-- **Repositorio:** [layonetlpz/Panufactura](https://github.com/layonetlpz/Panufactura)
+> **Nota sobre Google Drive Desktop en Windows:** Si trabajas sobre una unidad virtualizada (`G:\Mi unidad\...`), ejecuta `npm install` y `npm run build` en una ruta **NTFS local** para evitar errores `EBADF` del sistema de archivos virtual.
