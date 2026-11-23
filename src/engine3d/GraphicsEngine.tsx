@@ -73,20 +73,28 @@ const FpsSampler: React.FC<{ onSample?: (fps: number) => void }> = ({ onSample }
 };
 
 /**
- * Ensures WebGL renderer and camera projection update cleanly when mobile panels expand/collapse or device orientation changes.
+ * Ensures React Three Fiber store, WebGL renderer, and camera projection stay synchronized
+ * when panels expand/collapse or window/device dimensions change.
  */
 const ViewportResizeSync: React.FC<{ containerRef: React.RefObject<HTMLDivElement | null> }> = ({
   containerRef,
 }) => {
-  const { gl, camera } = useThree();
+  const { setSize, size, camera } = useThree();
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const { width, height } = entry.contentRect;
+        const width = Math.round(entry.contentRect.width);
+        const height = Math.round(entry.contentRect.height);
         if (width > 0 && height > 0) {
-          gl.setSize(width, height, false);
+          const cur = sizeRef.current;
+          if (Math.abs(width - cur.width) > 1 || Math.abs(height - cur.height) > 1) {
+            setSize(width, height);
+          }
           if ('aspect' in camera) {
             (camera as THREE.PerspectiveCamera).aspect = width / height;
             camera.updateProjectionMatrix();
@@ -96,7 +104,7 @@ const ViewportResizeSync: React.FC<{ containerRef: React.RefObject<HTMLDivElemen
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [containerRef, gl, camera]);
+  }, [containerRef, setSize, camera]);
   return null;
 };
 
@@ -184,9 +192,10 @@ export const GraphicsEngine: React.FC<Props> = ({
     <CanvasErrorBoundary fallback={fallbackNode}>
       <div
         ref={wrapperRef}
-        className="relative w-full h-full overflow-hidden bg-[#E5E0D6] touch-none select-none"
+        className="relative w-full h-full overflow-hidden bg-[#E5E0D6] select-none"
       >
         <Canvas
+          resize={{ scroll: false, debounce: { scroll: 50, resize: 0 } }}
           shadows={quality !== 'low'}
           dpr={dpr}
           camera={{ position: [-10.5, 3.4, 2.5], fov: 43, near: 0.15, far: 100 }}

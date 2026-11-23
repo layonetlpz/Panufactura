@@ -27,11 +27,14 @@ export const CameraController: React.FC<Props> = ({
   const desiredPos = useRef(new THREE.Vector3(0, 10, 16));
   const desiredTarget = useRef(new THREE.Vector3(0, 1, 0));
 
-  // Compute portrait pullback factor so vertical mobile screens (< 1.0 aspect ratio) frame the entire machine and dough tray without cropping
+  // Compute portrait pullback factor ONLY on narrow vertical phone screens (aspect < 0.88),
+  // quantized to 2 decimals so desktop/laptop canvases (aspect >= 1.0) never pull back or re-trigger on minor resizes
   const aspect = size.width / Math.max(1, size.height);
   const portraitPullback =
-    aspect < 1.05
-      ? THREE.MathUtils.clamp(1 / Math.pow(Math.max(0.45, aspect), 0.36), 1.12, 1.42)
+    aspect < 0.88
+      ? Math.round(
+          THREE.MathUtils.clamp(1 / Math.pow(Math.max(0.45, aspect), 0.36), 1.12, 1.4) * 100
+        ) / 100
       : 1.0;
 
   useEffect(() => {

@@ -74,7 +74,9 @@ export const ProcessTourView: React.FC<Props> = ({
   const [focusMachineId, setFocusMachineId] = useState<string | null>(null);
   const [sideOpen, setSideOpen] = useState<boolean>(true);
   const [mobileSummaryExpanded, setMobileSummaryExpanded] = useState<boolean>(false);
-  const [mobileTechSheetOpen, setMobileTechSheetOpen] = useState<boolean>(false);
+  const [mobileTechSheetOpen, setMobileTechSheetOpen] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : false
+  );
   const [activeTab, setActiveTab] = useState<
     'tech' | 'vars' | 'io' | 'equip' | 'quality' | 'safety'
   >('tech');
@@ -595,11 +597,11 @@ export const ProcessTourView: React.FC<Props> = ({
 
       {/* ==================== 2. CENTRAL WORKSPACE: 3D VIEWPORT + DESKTOP SIDE SHEET ==================== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
-        {/* 3D Canvas Viewport: Maximum unobstructed height on Mobile (54svh portrait, 74svh landscape) & 575px on Desktop */}
+        {/* 3D Canvas Viewport: Responsive height via .sim3d-viewport-box (Mobile 54svh/74svh, Tablet 500px, Desktop 575px) */}
         <div
           className={`${
             sideOpen ? 'lg:col-span-8' : 'lg:col-span-12'
-          } relative h-[54svh] min-h-[340px] max-h-[520px] max-lg:landscape:h-[74svh] lg:h-[575px] lg:max-h-none rounded-2xl border border-[#E5DEC9] shadow-sm overflow-hidden bg-[#E5E0D6]`}
+          } relative sim3d-viewport-box rounded-2xl border border-[#E5DEC9] shadow-sm overflow-hidden bg-[#E5E0D6]`}
         >
           <GraphicsEngine
             activePhaseId={phase.id}
@@ -651,38 +653,39 @@ export const ProcessTourView: React.FC<Props> = ({
             ))}
           </div>
 
-          {/* DESKTOP-ONLY: Bottom-Right Telemetry & Measured FPS Pill */}
+          {/* DESKTOP-ONLY: Bottom Row — Left Kinematic Sub-Phase HUD + Right Telemetry/FPS Pill (Flex-separated so they never collide on 1024-1366px laptops) */}
           {!cleanHudMode && (
-            <div className="hidden lg:flex absolute bottom-3 right-3 z-10 items-center gap-2 rounded-xl bg-[#14181F]/90 backdrop-blur-md text-white px-3 py-2 text-[11px] border border-white/15 pointer-events-none shadow-lg">
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  isPlaying ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
-                }`}
-              />
-              <span className="font-mono-tech">
-                {isPlaying ? `ACTIVO (${speed}x)` : 'PAUSA'} · {Math.round(phaseProgress * 100)}%
-              </span>
-              <span className="text-slate-400">|</span>
-              <span className="font-mono-tech text-emerald-300 flex items-center gap-1">
-                <Gauge className="w-3 h-3" /> {measuredFps} FPS
-              </span>
-            </div>
-          )}
+            <div className="hidden lg:flex absolute bottom-3 left-3 right-3 z-10 items-end justify-between gap-3 pointer-events-none">
+              <div className="max-w-md xl:max-w-lg min-w-0 rounded-xl bg-[#14181F]/92 backdrop-blur-md text-white px-3.5 py-2.5 text-xs border border-white/15 shadow-lg space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono-tech text-[10px] uppercase tracking-wider text-[#F4D06F] font-bold truncate">
+                    Cinemática Activa ({Math.round(activeSubPhase.range[0] * 100)}%–
+                    {Math.round(activeSubPhase.range[1] * 100)}%)
+                  </span>
+                  <span className="font-mono-tech text-[10px] text-emerald-300 shrink-0">
+                    ASME: {phase.asme}
+                  </span>
+                </div>
+                <div className="font-bold text-white leading-snug">{activeSubPhase.label}</div>
+                <div className="text-[11px] text-slate-300 leading-snug line-clamp-2">
+                  {phase.visualCaption}
+                </div>
+              </div>
 
-          {/* DESKTOP-ONLY: Bottom-Left Kinematic Sub-Phase & Dough State HUD (Moved below canvas on mobile!) */}
-          {!cleanHudMode && (
-            <div className="hidden lg:block absolute bottom-3 left-3 max-w-lg z-10 rounded-xl bg-[#14181F]/92 backdrop-blur-md text-white px-4 py-2.5 text-xs border border-white/15 pointer-events-none shadow-lg space-y-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-mono-tech text-[10px] uppercase tracking-wider text-[#F4D06F] font-bold">
-                  Cinemática Activa ({Math.round(activeSubPhase.range[0] * 100)}%–
-                  {Math.round(activeSubPhase.range[1] * 100)}%)
+              <div className="shrink-0 flex items-center gap-2 rounded-xl bg-[#14181F]/90 backdrop-blur-md text-white px-3 py-2 text-[11px] border border-white/15 shadow-lg">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    isPlaying ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
+                  }`}
+                />
+                <span className="font-mono-tech">
+                  {isPlaying ? `ACTIVO (${speed}x)` : 'PAUSA'} · {Math.round(phaseProgress * 100)}%
                 </span>
-                <span className="font-mono-tech text-[10px] text-emerald-300">
-                  ASME: {phase.asme}
+                <span className="text-slate-400">|</span>
+                <span className="font-mono-tech text-emerald-300 flex items-center gap-1">
+                  <Gauge className="w-3 h-3" /> {measuredFps} FPS
                 </span>
               </div>
-              <div className="font-bold text-white leading-snug">{activeSubPhase.label}</div>
-              <div className="text-[11px] text-slate-300 leading-snug">{phase.visualCaption}</div>
             </div>
           )}
 
