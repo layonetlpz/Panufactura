@@ -25,11 +25,15 @@ import {
   Presentation,
   Scissors,
   Gauge,
+  ChevronDown,
+  ChevronUp,
+  BookOpen,
 } from 'lucide-react';
 import { PHASES_DATA } from '../data/phasesData';
 import { GraphicsEngine } from '../engine3d/GraphicsEngine';
 import {
   CameraPreset,
+  HotspotInfo,
   MACHINES_INFO,
   PHASE_3D_CONFIGS,
   QualityLevel,
@@ -66,8 +70,11 @@ export const ProcessTourView: React.FC<Props> = ({
   const [cleanHudMode, setCleanHudMode] = useState<boolean>(false);
   const [measuredFps, setMeasuredFps] = useState<number>(60);
   const [selectedMachineId, setSelectedMachineId] = useState<string | null>(null);
+  const [activeHotspot, setActiveHotspot] = useState<HotspotInfo | null>(null);
   const [focusMachineId, setFocusMachineId] = useState<string | null>(null);
   const [sideOpen, setSideOpen] = useState<boolean>(true);
+  const [mobileSummaryExpanded, setMobileSummaryExpanded] = useState<boolean>(false);
+  const [mobileTechSheetOpen, setMobileTechSheetOpen] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<
     'tech' | 'vars' | 'io' | 'equip' | 'quality' | 'safety'
   >('tech');
@@ -81,17 +88,16 @@ export const ProcessTourView: React.FC<Props> = ({
     ((activeIndex + phaseProgress) / PHASES_DATA.length) * 100
   );
 
-  // Find active kinematic sub-phase description based on phaseProgress (0..1)
+  // Active kinematic sub-phase description based on phaseProgress (0..1)
   const activeSubPhase =
     phase3D.subPhases.find(
       (sp) => phaseProgress >= sp.range[0] && phaseProgress <= sp.range[1]
     ) || phase3D.subPhases[phase3D.subPhases.length - 1];
 
-  // Continuous multimedia playback engine (50ms ticks, delta-synced, preserves state on pause)
+  // Continuous multimedia playback engine (50ms ticks, preserves state on pause)
   useEffect(() => {
     if (!isPlaying) return;
     const tickMs = 50;
-    // At 1x speed, a full phase takes ~5.5 seconds
     const stepPerTick = (tickMs / 5500) * speed;
 
     const timer = setInterval(() => {
@@ -120,6 +126,7 @@ export const ProcessTourView: React.FC<Props> = ({
   // Reset manual machine focus when changing phase
   useEffect(() => {
     setFocusMachineId(null);
+    setActiveHotspot(null);
     if (cameraPreset !== 'overview' && cameraPreset !== 'follow') {
       setCameraPreset('station');
     }
@@ -164,87 +171,325 @@ export const ProcessTourView: React.FC<Props> = ({
 
   const canInspectCrumb = phase.id >= 13 && phase.id <= 16;
 
+  const cameraModes: { id: CameraPreset; label: string }[] = [
+    { id: 'station', label: 'Estación' },
+    { id: 'follow', label: 'Seguimiento' },
+    { id: 'closeup', label: 'Detalle' },
+    { id: 'interior', label: 'Interior' },
+    { id: 'overview', label: 'General' },
+    { id: 'top', label: 'Superior' },
+    { id: 'side', label: 'Lateral' },
+  ];
+
+  const renderTechnicalTabsContent = () => (
+    <>
+      <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-3 gap-1 p-2 border-b border-[#E5DEC9] bg-[#FBF9F5]">
+        {[
+          { key: 'tech', label: 'Descripción', icon: <Info className="w-3.5 h-3.5" /> },
+          { key: 'vars', label: 'Variables', icon: <Sliders className="w-3.5 h-3.5" /> },
+          {
+            key: 'io',
+            label: 'Entradas/Sal.',
+            icon: <ArrowRightLeft className="w-3.5 h-3.5" />,
+          },
+          { key: 'equip', label: 'Maquinaria', icon: <Wrench className="w-3.5 h-3.5" /> },
+          {
+            key: 'quality',
+            label: 'Calidad',
+            icon: <CheckCircle2 className="w-3.5 h-3.5" />,
+          },
+          {
+            key: 'safety',
+            label: 'Seguridad',
+            icon: <ShieldAlert className="w-3.5 h-3.5" />,
+          },
+        ].map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setActiveTab(t.key as typeof activeTab)}
+            className={`inline-flex items-center justify-center gap-1 px-2 py-2 lg:py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+              activeTab === t.key
+                ? 'bg-[#14181F] text-white shadow-xs'
+                : 'text-[#5C554B] hover:bg-[#F3EFE6]'
+            }`}
+          >
+            {t.icon}
+            <span className="truncate">{t.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="p-4 overflow-y-auto thin-scrollbar flex-1 space-y-3 text-xs">
+        {activeTab === 'tech' && (
+          <>
+            {/* Kinematic Sub-Phases Breakdown */}
+            <div className="rounded-xl bg-[#14181F] text-white p-3 space-y-1.5">
+              <span className="font-mono-tech text-[10px] uppercase tracking-wider text-[#F4D06F] font-bold block">
+                Secuencia Cinemática de la Fase (0.00 – 1.00)
+              </span>
+              {phase3D.subPhases.map((sp, i) => {
+                const isCurrentSub =
+                  phaseProgress >= sp.range[0] && phaseProgress <= sp.range[1];
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setPhaseProgress(sp.range[0] + 0.05)}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] transition cursor-pointer flex items-center justify-between gap-2 ${
+                      isCurrentSub
+                        ? 'bg-[#C87D20] text-white font-bold'
+                        : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                    }`}
+                  >
+                    <span className="truncate">{sp.label}</span>
+                    <span className="font-mono-tech text-[10px] shrink-0">
+                      {Math.round(sp.range[0] * 100)}–{Math.round(sp.range[1] * 100)}%
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="rounded-xl bg-[#F3EFE6] border border-[#E5DEC9] p-3">
+              <span className="font-bold text-[#9A3412] uppercase text-[10px] tracking-wider block mb-1">
+                Objetivo de la Operación
+              </span>
+              <p className="text-[#181C23] font-medium leading-relaxed">{phase.objective}</p>
+            </div>
+            <div className="space-y-1">
+              <span className="font-bold text-[#14181F] block">Descripción técnica</span>
+              <p className="text-[#5C554B] leading-relaxed">{phase.whatHappens}</p>
+            </div>
+            <div className="rounded-xl bg-[#1B4332]/8 border border-[#1B4332]/20 p-3">
+              <span className="font-bold text-[#1B4332] block mb-0.5">
+                Impacto en el pan rollo terminado
+              </span>
+              <p className="text-[#181C23] leading-relaxed">{phase.impactOnFinalProduct}</p>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'vars' && (
+          <div className="space-y-2.5">
+            {phase.variables.map((v, i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-[#E5DEC9] p-3 bg-[#FBF9F5] flex items-center justify-between gap-2"
+              >
+                <div>
+                  <div className="font-bold text-[#14181F]">{v.label}</div>
+                  {v.note && (
+                    <div className="text-[11px] text-[#5C554B] mt-0.5">{v.note}</div>
+                  )}
+                </div>
+                <span className="font-mono-tech font-bold text-[#9A3412] bg-[#C87D20]/15 px-2.5 py-1 rounded-lg shrink-0">
+                  {v.referenceValue}
+                </span>
+              </div>
+            ))}
+            {onOpenVariables && (
+              <button
+                onClick={onOpenVariables}
+                className="w-full mt-2 py-2.5 px-3 rounded-xl bg-[#14181F] hover:bg-[#252B37] text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Sliders className="w-3.5 h-3.5 text-[#F4D06F]" />
+                Simular alteraciones en Laboratorio de Variables
+              </button>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'io' && (
+          <div className="space-y-3">
+            <div>
+              <span className="font-bold text-[#14181F] block mb-1.5">
+                Entradas ({phase.inputState})
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {phase.inputs.map((inp, i) => (
+                  <span
+                    key={i}
+                    className="px-2.5 py-1 rounded-lg bg-[#F3EFE6] border border-[#E5DEC9] text-[#181C23] font-medium"
+                  >
+                    {inp}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-xl bg-[#C87D20]/10 border border-[#C87D20]/30 p-3">
+              <span className="font-bold text-[#9A3412] block mb-0.5">
+                Transformación físico-química / operativa
+              </span>
+              <p className="text-[#181C23] leading-relaxed">{phase.transformation}</p>
+            </div>
+            <div>
+              <span className="font-bold text-[#14181F] block mb-1.5">Salidas de la fase</span>
+              {phase.outputs.map((out, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl bg-[#1B4332]/10 border border-[#1B4332]/25 p-2.5 text-[#1B4332] font-bold"
+                >
+                  {out}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'equip' && (
+          <div className="space-y-2.5">
+            {phase.equipment.map((eq, i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-[#E5DEC9] p-3 bg-[#FBF9F5] space-y-1"
+              >
+                <div className="flex justify-between items-center gap-2">
+                  <span className="font-bold text-[#14181F]">{eq.name}</span>
+                  <span className="text-[10px] font-mono-tech font-bold px-2 py-0.5 rounded-full bg-[#F3EFE6] border border-[#E5DEC9]">
+                    {eq.scale}
+                  </span>
+                </div>
+                <p className="text-[#5C554B] leading-relaxed">{eq.role}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeTab === 'quality' && (
+          <div className="space-y-2.5">
+            <div className="rounded-xl border border-[#E5DEC9] bg-[#FBF9F5] p-3">
+              <span className="font-bold block text-[#14181F] mb-0.5">Qué verificar</span>
+              <p className="text-[#5C554B]">{phase.qualityControl.toVerify}</p>
+            </div>
+            <div className="rounded-xl border border-[#1B4332]/30 bg-[#1B4332]/8 p-3">
+              <span className="font-bold block text-[#1B4332] mb-0.5">
+                Criterio de aceptación
+              </span>
+              <p className="text-[#181C23]">{phase.qualityControl.adequateConditions}</p>
+            </div>
+            <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3">
+              <span className="font-bold block text-rose-900 mb-0.5">Errores frecuentes</span>
+              <p className="text-rose-950">{phase.qualityControl.commonErrors}</p>
+            </div>
+            <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-3">
+              <span className="font-bold block text-amber-900 mb-0.5">Acción correctiva</span>
+              <p className="text-amber-950">{phase.qualityControl.correctiveActions}</p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'safety' && (
+          <div className="space-y-2.5">
+            <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3">
+              <span className="font-bold block text-rose-900 mb-0.5">Peligros asociados</span>
+              <p className="text-rose-950">{phase.safetyAndHygiene.risks}</p>
+            </div>
+            <div className="rounded-xl border border-[#E5DEC9] bg-[#FBF9F5] p-3">
+              <span className="font-bold block text-[#14181F] mb-0.5">
+                Buenas Prácticas de Manufactura (BPM)
+              </span>
+              <p className="text-[#5C554B]">{phase.safetyAndHygiene.hygiene}</p>
+            </div>
+            <div className="rounded-xl border border-[#E5DEC9] bg-[#FBF9F5] p-3">
+              <span className="font-bold block text-[#14181F] mb-0.5">
+                Prevención de contaminación cruzada
+              </span>
+              <p className="text-[#5C554B]">
+                {phase.safetyAndHygiene.contaminationPrevention}
+              </p>
+            </div>
+            <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-3">
+              <span className="font-bold block text-amber-900 mb-0.5">
+                Gestión de alérgenos
+              </span>
+              <p className="text-amber-950">{phase.safetyAndHygiene.allergens}</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div
       ref={containerRef}
-      className={`flex flex-col gap-3.5 ${
-        isFullscreen ? 'bg-[#FBF9F5] p-4 h-screen overflow-y-auto' : ''
+      className={`flex flex-col gap-3 ${
+        isFullscreen ? 'bg-[#FBF9F5] p-3 sm:p-4 h-screen overflow-y-auto' : ''
       }`}
     >
-      {/* ==================== 1. SIMULATOR COMMAND BAR ==================== */}
-      <div className="rounded-2xl bg-[#14181F] text-white px-4 py-3 shadow-md border border-[#2D3545] flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#C87D20] to-[#B45309] text-xs font-mono-tech font-bold shrink-0 shadow-sm">
-            FASE {String(phase.id).padStart(2, '0')} / {PHASES_DATA.length}
+      {/* ==================== 1. SIMULATOR COMMAND BAR (COMPACT ON MOBILE, FULL ON DESKTOP) ==================== */}
+      <div className="rounded-2xl bg-[#14181F] text-white px-3 py-2.5 sm:px-4 sm:py-3 shadow-md border border-[#2D3545] flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-[#C87D20] to-[#B45309] text-[11px] sm:text-xs font-mono-tech font-bold shrink-0 shadow-sm">
+            F{String(phase.id).padStart(2, '0')}/18
           </div>
           <div className="min-w-0">
-            <div className="text-sm sm:text-base font-bold leading-tight truncate">
+            <div className="text-xs sm:text-base font-bold leading-tight truncate">
               {phase.name}
             </div>
-            <div className="text-[11px] text-[#F4D06F] flex items-center gap-1.5 truncate">
+            <div className="hidden sm:flex text-[11px] text-[#F4D06F] items-center gap-1.5 truncate">
               <span>{phase.zone}</span>
               <span>·</span>
-              <span className="text-slate-300">{phase3D.operationLabel}</span>
+              <span className="text-slate-300 truncate">{phase3D.operationLabel}</span>
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          {/* 4-Level Graphics Quality Selector (ULTRA, HIGH, MEDIUM, LOW) */}
+        {/* Right Toolbar Controls */}
+        <div className="flex items-center gap-1.5 shrink-0">
           <select
             value={quality}
             onChange={(e) => setQuality(e.target.value as QualityLevel)}
             aria-label="Calidad gráfica 3D"
-            className="bg-white/10 border border-white/15 text-xs font-semibold rounded-xl px-2.5 py-1.5 text-white cursor-pointer"
+            className="bg-white/10 border border-white/15 text-[11px] sm:text-xs font-semibold rounded-xl px-2 py-1.5 text-white cursor-pointer"
           >
             <option value="ultra" className="text-slate-900">
-              Calidad: ULTRA (PBR + Sombras Contacto)
+              ULTRA
             </option>
             <option value="high" className="text-slate-900">
-              Calidad: HIGH (Equilibrada)
+              HIGH
             </option>
             <option value="medium" className="text-slate-900">
-              Calidad: MEDIUM
+              MED
             </option>
             <option value="low" className="text-slate-900">
-              Calidad: LOW (Ahorro GPU)
+              LOW
             </option>
           </select>
 
-          {/* Crumb Cross-Section Toggle (Corte Transversal de Miga) */}
           <button
             onClick={() => {
               const next = !showCrumbCut;
               setShowCrumbCut(next);
               if (next) {
-                if (!canInspectCrumb) onChangeIndex(14); // Jump to Phase 15 Inspection if outside baked phases
+                if (!canInspectCrumb) onChangeIndex(14);
                 selectPreset('closeup');
               }
             }}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
               showCrumbCut
                 ? 'bg-[#C87D20] border-[#F4D06F] text-white'
                 : 'bg-white/8 border-white/15 text-slate-200 hover:bg-white/15'
             }`}
-            title="Observar corte transversal y estructura alveolar interna de la miga"
+            title="Corte transversal de miga 3D"
           >
             <Scissors className="w-3.5 h-3.5" />
-            <span>Corte Miga</span>
+            <span className="hidden md:inline">Corte Miga</span>
           </button>
 
           <button
             onClick={() => setShowHotspots((s) => !s)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
               showHotspots
                 ? 'bg-[#C87D20]/30 border-[#C87D20] text-[#F4D06F]'
                 : 'bg-white/8 border-white/15 text-slate-300'
             }`}
-            title="Mostrar u ocultar etiquetas interactivas 3D"
+            title="Mostrar u ocultar hotspots 3D"
           >
             <Eye className="w-3.5 h-3.5" />
-            <span>Hotspots</span>
+            <span className="hidden md:inline">Hotspots</span>
           </button>
 
+          {/* Desktop-only extended toolbar buttons */}
           <button
             onClick={() => {
               const nextClean = !cleanHudMode;
@@ -257,26 +502,25 @@ export const ProcessTourView: React.FC<Props> = ({
                 setSideOpen(true);
               }
             }}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
+            className={`hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border transition cursor-pointer ${
               cleanHudMode
                 ? 'bg-emerald-600/30 border-emerald-400 text-emerald-200'
                 : 'bg-white/8 border-white/15 text-slate-300 hover:bg-white/15'
             }`}
-            title="Modo inspección limpia: oculta paneles y etiquetas para observar el modelo 3D puro"
+            title="Modo inspección limpia"
           >
             {cleanHudMode ? (
               <EyeOff className="w-3.5 h-3.5" />
             ) : (
               <Focus className="w-3.5 h-3.5" />
             )}
-            <span className="hidden sm:inline">Vista Limpia</span>
+            <span>Vista Limpia</span>
           </button>
 
           {onOpenVariables && (
             <button
               onClick={onOpenVariables}
-              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/8 hover:bg-white/15 text-xs font-semibold border border-white/15 text-slate-200 cursor-pointer"
-              title="Modificar variables de proceso"
+              className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/8 hover:bg-white/15 text-xs font-semibold border border-white/15 text-slate-200 cursor-pointer"
             >
               <Sliders className="w-3.5 h-3.5 text-[#F4D06F]" />
               <span>Variables</span>
@@ -285,22 +529,21 @@ export const ProcessTourView: React.FC<Props> = ({
 
           <button
             onClick={() => setSideOpen((o) => !o)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/8 hover:bg-white/15 text-xs font-semibold border border-white/15 cursor-pointer"
-            title="Mostrar u ocultar ficha de ingeniería"
+            className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/8 hover:bg-white/15 text-xs font-semibold border border-white/15 cursor-pointer"
+            title="Mostrar u ocultar ficha lateral"
           >
             {sideOpen ? (
               <PanelRightClose className="w-3.5 h-3.5 text-[#F4D06F]" />
             ) : (
               <PanelRightOpen className="w-3.5 h-3.5 text-[#F4D06F]" />
             )}
-            <span className="hidden sm:inline">{sideOpen ? 'Ocultar ficha' : 'Ver ficha'}</span>
+            <span>{sideOpen ? 'Ocultar ficha' : 'Ver ficha'}</span>
           </button>
 
           {onOpenPresentation && (
             <button
               onClick={onOpenPresentation}
               className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#1B4332] hover:bg-[#2D6A4F] text-emerald-100 text-xs font-bold border border-emerald-500/30 cursor-pointer"
-              title="Abrir Modo Exposición"
             >
               <Presentation className="w-3.5 h-3.5" />
               <span>Aula</span>
@@ -327,45 +570,22 @@ export const ProcessTourView: React.FC<Props> = ({
         </div>
       </div>
 
-      {/* Hardware Performance Advisory if Ultra drops below 6 FPS */}
-      {quality === 'ultra' && measuredFps < 6 && (
-        <div className="rounded-xl bg-amber-50 border border-amber-300 px-3.5 py-2 text-xs text-amber-950 flex items-center justify-between gap-2">
-          <span>
-            <strong>Aviso de hardware:</strong> Se detectó una tasa de cuadros de ~{measuredFps} FPS
-            en calidad ULTRA. Puedes cambiar a <strong>HIGH</strong> o <strong>MEDIUM</strong> para
-            mayor fluidez.
-          </span>
-          <button
-            onClick={() => setQuality('high')}
-            className="px-2.5 py-1 rounded-lg bg-amber-700 text-white font-bold cursor-pointer shrink-0"
-          >
-            Cambiar a HIGH
-          </button>
-        </div>
-      )}
-
       {/* HELP POPOVER */}
       {showHelp && (
-        <div className="rounded-2xl bg-[#F3EFE6] border border-[#C87D20]/50 p-4 text-xs text-[#181C23] flex items-start justify-between gap-4 shadow-sm">
-          <div className="space-y-1.5">
+        <div className="rounded-2xl bg-[#F3EFE6] border border-[#C87D20]/50 p-3.5 text-xs text-[#181C23] flex items-start justify-between gap-3 shadow-sm">
+          <div className="space-y-1">
             <div className="font-bold text-sm text-[#14181F]">
-              Guía de Simulación Cinemática e Interacción 3D
+              Guía de Interacción Táctil y Cinemática 3D
             </div>
             <p className="text-[#5C554B]">
-              • <strong>7 Modos de cámara:</strong> alterna entre <em>Estación</em>,{' '}
-              <em>Seguimiento</em> (acompaña el producto), <em>Detalle</em> (macro),{' '}
-              <em>Interior</em> (dentro de tolva/cámara/horno), <em>General</em>, <em>Superior</em>{' '}
-              y <em>Lateral</em>.
-            </p>
-            <p className="text-[#5C554B]">
-              • <strong>Inspección de miga y cinemática:</strong> activa <strong>Corte Miga</strong>{' '}
-              para observar la sección transversal alveolar del pan rollo o arrastra la barra de
-              progreso (`0% – 100%`) para recorrer cada micro-operación mecánica.
+              • <strong>En teléfonos y tabletas:</strong> desliza con 1 dedo sobre la escena para
+              rotar la cámara, pellizca con 2 dedos para acercar/alejar y toca cualquier máquina o
+              punto numerado para ver sus datos debajo del visor.
             </p>
           </div>
           <button
             onClick={() => setShowHelp(false)}
-            className="p-1.5 hover:bg-black/5 rounded-lg cursor-pointer"
+            className="p-1.5 hover:bg-black/5 rounded-lg cursor-pointer shrink-0"
             aria-label="Cerrar ayuda"
           >
             <X className="w-4 h-4" />
@@ -373,13 +593,13 @@ export const ProcessTourView: React.FC<Props> = ({
         </div>
       )}
 
-      {/* ==================== 2. CENTRAL WORKSPACE: 3D VIEWPORT + TECHNICAL SHEET ==================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-        {/* 3D Canvas Viewport */}
+      {/* ==================== 2. CENTRAL WORKSPACE: 3D VIEWPORT + DESKTOP SIDE SHEET ==================== */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
+        {/* 3D Canvas Viewport: Maximum unobstructed height on Mobile (54svh portrait, 74svh landscape) & 575px on Desktop */}
         <div
           className={`${
             sideOpen ? 'lg:col-span-8' : 'lg:col-span-12'
-          } relative h-[450px] sm:h-[530px] lg:h-[575px] rounded-2xl border border-[#E5DEC9] shadow-sm overflow-hidden bg-[#E5E0D6]`}
+          } relative h-[54svh] min-h-[340px] max-h-[520px] max-lg:landscape:h-[74svh] lg:h-[575px] lg:max-h-none rounded-2xl border border-[#E5DEC9] shadow-sm overflow-hidden bg-[#E5E0D6]`}
         >
           <GraphicsEngine
             activePhaseId={phase.id}
@@ -398,21 +618,24 @@ export const ProcessTourView: React.FC<Props> = ({
             phaseProgress={phaseProgress}
             showCrumbCut={showCrumbCut}
             onFpsSample={setMeasuredFps}
+            activeHotspot={activeHotspot}
+            onSelectHotspot={setActiveHotspot}
           />
 
-          {/* Top-Left 7 Camera Perspectives Bar */}
-          <div className="absolute top-3 left-3 z-10 flex flex-wrap gap-1">
-            {(
-              [
-                { id: 'station', label: 'Estación' },
-                { id: 'follow', label: 'Seguimiento' },
-                { id: 'closeup', label: 'Detalle' },
-                { id: 'interior', label: 'Interior' },
-                { id: 'overview', label: 'General' },
-                { id: 'top', label: 'Superior' },
-                { id: 'side', label: 'Lateral' },
-              ] as { id: CameraPreset; label: string }[]
-            ).map((cam) => (
+          {/* MOBILE-ONLY: Ultra-compact non-obstructive corner status chip (takes <4% of top corner, never blocks machine or dough) */}
+          <div className="lg:hidden absolute top-2.5 left-2.5 z-10 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#14181F]/80 backdrop-blur-md text-white text-[11px] font-mono-tech border border-white/15 pointer-events-none">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isPlaying ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
+              }`}
+            />
+            <span>{phase.shortName}</span>
+            <span className="text-[#F4D06F] font-bold">{Math.round(phaseProgress * 100)}%</span>
+          </div>
+
+          {/* DESKTOP-ONLY: Top-Left 7 Camera Perspectives Bar (On mobile it lives below the canvas so it never wraps over the 3D scene!) */}
+          <div className="hidden lg:flex absolute top-3 left-3 z-10 flex-wrap gap-1">
+            {cameraModes.map((cam) => (
               <button
                 key={cam.id}
                 onClick={() => selectPreset(cam.id)}
@@ -428,9 +651,9 @@ export const ProcessTourView: React.FC<Props> = ({
             ))}
           </div>
 
-          {/* Bottom-Right Telemetry & Measured FPS Pill (never overlaps Top-Left Camera Buttons) */}
+          {/* DESKTOP-ONLY: Bottom-Right Telemetry & Measured FPS Pill */}
           {!cleanHudMode && (
-            <div className="hidden sm:flex absolute bottom-3 right-3 z-10 items-center gap-2 rounded-xl bg-[#14181F]/90 backdrop-blur-md text-white px-3 py-2 text-[11px] border border-white/15 pointer-events-none shadow-lg">
+            <div className="hidden lg:flex absolute bottom-3 right-3 z-10 items-center gap-2 rounded-xl bg-[#14181F]/90 backdrop-blur-md text-white px-3 py-2 text-[11px] border border-white/15 pointer-events-none shadow-lg">
               <span
                 className={`w-2 h-2 rounded-full ${
                   isPlaying ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
@@ -446,9 +669,9 @@ export const ProcessTourView: React.FC<Props> = ({
             </div>
           )}
 
-          {/* Bottom-Left Kinematic Sub-Phase & Dough State HUD */}
+          {/* DESKTOP-ONLY: Bottom-Left Kinematic Sub-Phase & Dough State HUD (Moved below canvas on mobile!) */}
           {!cleanHudMode && (
-            <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:max-w-lg z-10 rounded-xl bg-[#14181F]/92 backdrop-blur-md text-white px-4 py-2.5 text-xs border border-white/15 pointer-events-none shadow-lg space-y-1">
+            <div className="hidden lg:block absolute bottom-3 left-3 max-w-lg z-10 rounded-xl bg-[#14181F]/92 backdrop-blur-md text-white px-4 py-2.5 text-xs border border-white/15 pointer-events-none shadow-lg space-y-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono-tech text-[10px] uppercase tracking-wider text-[#F4D06F] font-bold">
                   Cinemática Activa ({Math.round(activeSubPhase.range[0] * 100)}%–
@@ -463,9 +686,9 @@ export const ProcessTourView: React.FC<Props> = ({
             </div>
           )}
 
-          {/* Selected Machine Floating Card */}
+          {/* DESKTOP-ONLY: Selected Machine Floating Card (On mobile it renders below the canvas!) */}
           {selectedMachine && !cleanHudMode && (
-            <div className="absolute top-14 right-3 z-20 w-72 sm:w-80 rounded-2xl bg-[#14181F]/95 backdrop-blur-md text-white border border-[#C87D20]/60 p-4 shadow-2xl space-y-2.5">
+            <div className="hidden lg:block absolute top-14 right-3 z-20 w-80 rounded-2xl bg-[#14181F]/95 backdrop-blur-md text-white border border-[#C87D20]/60 p-4 shadow-2xl space-y-2.5">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="text-[10px] font-mono-tech font-bold uppercase text-[#F4D06F]">
@@ -520,9 +743,9 @@ export const ProcessTourView: React.FC<Props> = ({
           )}
         </div>
 
-        {/* Right Side Engineering Sheet */}
+        {/* DESKTOP-ONLY: Right Side Engineering Sheet */}
         {sideOpen && (
-          <div className="lg:col-span-4 rounded-2xl bg-white border border-[#E5DEC9] shadow-sm flex flex-col h-[500px] lg:h-[575px] overflow-hidden">
+          <div className="hidden lg:flex lg:col-span-4 rounded-2xl bg-white border border-[#E5DEC9] shadow-sm flex-col h-[575px] overflow-hidden">
             <div className="p-4 border-b border-[#E5DEC9] bg-[#F3EFE6]/70">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-bold uppercase px-2 py-0.5 rounded-md bg-[#C87D20]/15 text-[#9A3412]">
@@ -536,245 +759,179 @@ export const ProcessTourView: React.FC<Props> = ({
                 {phase.id}. {phase.name}
               </h2>
             </div>
-
-            {/* 6 Technical Tabs */}
-            <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-3 gap-1 p-2 border-b border-[#E5DEC9] bg-[#FBF9F5]">
-              {[
-                { key: 'tech', label: 'Proceso', icon: <Info className="w-3.5 h-3.5" /> },
-                { key: 'vars', label: 'Variables', icon: <Sliders className="w-3.5 h-3.5" /> },
-                {
-                  key: 'io',
-                  label: 'Entradas/Sal.',
-                  icon: <ArrowRightLeft className="w-3.5 h-3.5" />,
-                },
-                { key: 'equip', label: 'Equipos', icon: <Wrench className="w-3.5 h-3.5" /> },
-                {
-                  key: 'quality',
-                  label: 'Calidad',
-                  icon: <CheckCircle2 className="w-3.5 h-3.5" />,
-                },
-                {
-                  key: 'safety',
-                  label: 'Inocuidad',
-                  icon: <ShieldAlert className="w-3.5 h-3.5" />,
-                },
-              ].map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setActiveTab(t.key as typeof activeTab)}
-                  className={`inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                    activeTab === t.key
-                      ? 'bg-[#14181F] text-white shadow-xs'
-                      : 'text-[#5C554B] hover:bg-[#F3EFE6]'
-                  }`}
-                >
-                  {t.icon}
-                  <span className="truncate">{t.label}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* Tab Content */}
-            <div className="p-4 overflow-y-auto thin-scrollbar flex-1 space-y-3 text-xs">
-              {activeTab === 'tech' && (
-                <>
-                  {/* Kinematic Sub-Phases Breakdown */}
-                  <div className="rounded-xl bg-[#14181F] text-white p-3 space-y-1.5">
-                    <span className="font-mono-tech text-[10px] uppercase tracking-wider text-[#F4D06F] font-bold block">
-                      Secuencia Cinemática de la Fase (0.00 – 1.00)
-                    </span>
-                    {phase3D.subPhases.map((sp, i) => {
-                      const isCurrentSub =
-                        phaseProgress >= sp.range[0] && phaseProgress <= sp.range[1];
-                      return (
-                        <button
-                          key={i}
-                          onClick={() => setPhaseProgress(sp.range[0] + 0.05)}
-                          className={`w-full text-left px-2 py-1 rounded-lg text-[11px] transition cursor-pointer flex items-center justify-between gap-2 ${
-                            isCurrentSub
-                              ? 'bg-[#C87D20] text-white font-bold'
-                              : 'bg-white/5 text-slate-300 hover:bg-white/10'
-                          }`}
-                        >
-                          <span className="truncate">{sp.label}</span>
-                          <span className="font-mono-tech text-[10px] shrink-0">
-                            {Math.round(sp.range[0] * 100)}–{Math.round(sp.range[1] * 100)}%
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="rounded-xl bg-[#F3EFE6] border border-[#E5DEC9] p-3">
-                    <span className="font-bold text-[#9A3412] uppercase text-[10px] tracking-wider block mb-1">
-                      Objetivo de la Operación
-                    </span>
-                    <p className="text-[#181C23] font-medium leading-relaxed">{phase.objective}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="font-bold text-[#14181F] block">Descripción técnica</span>
-                    <p className="text-[#5C554B] leading-relaxed">{phase.whatHappens}</p>
-                  </div>
-                  <div className="rounded-xl bg-[#1B4332]/8 border border-[#1B4332]/20 p-3">
-                    <span className="font-bold text-[#1B4332] block mb-0.5">
-                      Impacto en el pan rollo terminado
-                    </span>
-                    <p className="text-[#181C23] leading-relaxed">{phase.impactOnFinalProduct}</p>
-                  </div>
-                </>
-              )}
-
-              {activeTab === 'vars' && (
-                <div className="space-y-2.5">
-                  {phase.variables.map((v, i) => (
-                    <div
-                      key={i}
-                      className="rounded-xl border border-[#E5DEC9] p-3 bg-[#FBF9F5] flex items-center justify-between gap-2"
-                    >
-                      <div>
-                        <div className="font-bold text-[#14181F]">{v.label}</div>
-                        {v.note && (
-                          <div className="text-[11px] text-[#5C554B] mt-0.5">{v.note}</div>
-                        )}
-                      </div>
-                      <span className="font-mono-tech font-bold text-[#9A3412] bg-[#C87D20]/15 px-2.5 py-1 rounded-lg shrink-0">
-                        {v.referenceValue}
-                      </span>
-                    </div>
-                  ))}
-                  {onOpenVariables && (
-                    <button
-                      onClick={onOpenVariables}
-                      className="w-full mt-2 py-2.5 px-3 rounded-xl bg-[#14181F] hover:bg-[#252B37] text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <Sliders className="w-3.5 h-3.5 text-[#F4D06F]" />
-                      Simular alteraciones en Laboratorio de Variables
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {activeTab === 'io' && (
-                <div className="space-y-3">
-                  <div>
-                    <span className="font-bold text-[#14181F] block mb-1.5">
-                      Entradas ({phase.inputState})
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {phase.inputs.map((inp, i) => (
-                        <span
-                          key={i}
-                          className="px-2.5 py-1 rounded-lg bg-[#F3EFE6] border border-[#E5DEC9] text-[#181C23] font-medium"
-                        >
-                          {inp}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="rounded-xl bg-[#C87D20]/10 border border-[#C87D20]/30 p-3">
-                    <span className="font-bold text-[#9A3412] block mb-0.5">
-                      Transformación físico-química / operativa
-                    </span>
-                    <p className="text-[#181C23] leading-relaxed">{phase.transformation}</p>
-                  </div>
-                  <div>
-                    <span className="font-bold text-[#14181F] block mb-1.5">Salidas de la fase</span>
-                    {phase.outputs.map((out, i) => (
-                      <div
-                        key={i}
-                        className="rounded-xl bg-[#1B4332]/10 border border-[#1B4332]/25 p-2.5 text-[#1B4332] font-bold"
-                      >
-                        {out}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'equip' && (
-                <div className="space-y-2.5">
-                  {phase.equipment.map((eq, i) => (
-                    <div
-                      key={i}
-                      className="rounded-xl border border-[#E5DEC9] p-3 bg-[#FBF9F5] space-y-1"
-                    >
-                      <div className="flex justify-between items-center gap-2">
-                        <span className="font-bold text-[#14181F]">{eq.name}</span>
-                        <span className="text-[10px] font-mono-tech font-bold px-2 py-0.5 rounded-full bg-[#F3EFE6] border border-[#E5DEC9]">
-                          {eq.scale}
-                        </span>
-                      </div>
-                      <p className="text-[#5C554B] leading-relaxed">{eq.role}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {activeTab === 'quality' && (
-                <div className="space-y-2.5">
-                  <div className="rounded-xl border border-[#E5DEC9] bg-[#FBF9F5] p-3">
-                    <span className="font-bold block text-[#14181F] mb-0.5">Qué verificar</span>
-                    <p className="text-[#5C554B]">{phase.qualityControl.toVerify}</p>
-                  </div>
-                  <div className="rounded-xl border border-[#1B4332]/30 bg-[#1B4332]/8 p-3">
-                    <span className="font-bold block text-[#1B4332] mb-0.5">
-                      Criterio de aceptación
-                    </span>
-                    <p className="text-[#181C23]">{phase.qualityControl.adequateConditions}</p>
-                  </div>
-                  <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3">
-                    <span className="font-bold block text-rose-900 mb-0.5">Errores frecuentes</span>
-                    <p className="text-rose-950">{phase.qualityControl.commonErrors}</p>
-                  </div>
-                  <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-3">
-                    <span className="font-bold block text-amber-900 mb-0.5">Acción correctiva</span>
-                    <p className="text-amber-950">{phase.qualityControl.correctiveActions}</p>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'safety' && (
-                <div className="space-y-2.5">
-                  <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-3">
-                    <span className="font-bold block text-rose-900 mb-0.5">Peligros asociados</span>
-                    <p className="text-rose-950">{phase.safetyAndHygiene.risks}</p>
-                  </div>
-                  <div className="rounded-xl border border-[#E5DEC9] bg-[#FBF9F5] p-3">
-                    <span className="font-bold block text-[#14181F] mb-0.5">
-                      Buenas Prácticas de Manufactura (BPM)
-                    </span>
-                    <p className="text-[#5C554B]">{phase.safetyAndHygiene.hygiene}</p>
-                  </div>
-                  <div className="rounded-xl border border-[#E5DEC9] bg-[#FBF9F5] p-3">
-                    <span className="font-bold block text-[#14181F] mb-0.5">
-                      Prevención de contaminación cruzada
-                    </span>
-                    <p className="text-[#5C554B]">
-                      {phase.safetyAndHygiene.contaminationPrevention}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-3">
-                    <span className="font-bold block text-amber-900 mb-0.5">
-                      Gestión de alérgenos
-                    </span>
-                    <p className="text-amber-950">{phase.safetyAndHygiene.allergens}</p>
-                  </div>
-                </div>
-              )}
-            </div>
+            {renderTechnicalTabsContent()}
           </div>
         )}
       </div>
 
-      {/* ==================== 3. MULTIMEDIA PLAYBACK DECK & SCRUBBABLE TIMELINE ==================== */}
-      <div className="rounded-2xl bg-white border border-[#E5DEC9] p-4 shadow-sm space-y-3.5">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          {/* Transport Buttons */}
+      {/* ==================== 2B. MOBILE/TABLET EXTERNAL CAMERA BAR & CONTEXTUAL CARDS (< 1024px) ==================== */}
+      <div className="lg:hidden space-y-2.5">
+        {/* Touch-friendly External Camera Selector Bar */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
+          {cameraModes.map((cam) => (
+            <button
+              key={cam.id}
+              onClick={() => selectPreset(cam.id)}
+              className={`shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                cameraPreset === cam.id
+                  ? 'bg-[#14181F] text-[#F4D06F] border-[#C87D20] shadow-xs'
+                  : 'bg-white text-[#14181F] border-[#E5DEC9]'
+              }`}
+            >
+              <Camera className="w-3.5 h-3.5" />
+              <span>{cam.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Mobile Contextual Hotspot Card (Only appears below canvas when user taps a hotspot pin) */}
+        {activeHotspot && showHotspots && (
+          <div className="rounded-2xl bg-[#14181F] text-white p-3.5 border border-[#C87D20] shadow-md space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-[#F4D06F] flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-[#C87D20]" />
+                Componente: {activeHotspot.label}
+              </span>
+              <button
+                onClick={() => setActiveHotspot(null)}
+                className="px-2 py-0.5 rounded-lg bg-white/10 text-xs font-semibold text-slate-200 cursor-pointer"
+              >
+                Cerrar ✕
+              </button>
+            </div>
+            <p className="text-xs text-slate-200 leading-relaxed">{activeHotspot.description}</p>
+          </div>
+        )}
+
+        {/* Mobile Contextual Selected Machine Card (Appears below canvas when user taps a machine in 3D) */}
+        {selectedMachine && (
+          <div className="rounded-2xl bg-[#14181F] text-white p-4 border border-[#C87D20]/60 shadow-md space-y-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="text-[10px] font-mono-tech font-bold uppercase text-[#F4D06F]">
+                  Equipo Seleccionado · {selectedMachine.phaseRange}
+                </div>
+                <h3 className="font-bold text-sm text-white">{selectedMachine.name}</h3>
+              </div>
+              <button
+                onClick={() => setSelectedMachineId(null)}
+                className="p-1.5 rounded-lg bg-white/10 text-slate-200 cursor-pointer"
+                aria-label="Cerrar equipo seleccionado"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">{selectedMachine.description}</p>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => {
+                  setFocusMachineId(selectedMachine.id);
+                  setCameraPreset('station');
+                  setCameraTrigger((t) => t + 1);
+                }}
+                className="py-2 px-2.5 rounded-xl bg-[#C87D20] text-white text-xs font-bold cursor-pointer flex items-center justify-center gap-1"
+              >
+                <Focus className="w-3.5 h-3.5" /> Estación
+              </button>
+              <button
+                onClick={() => {
+                  setFocusMachineId(selectedMachine.id);
+                  setCameraPreset('interior');
+                  setCameraTrigger((t) => t + 1);
+                }}
+                className="py-2 px-2.5 rounded-xl bg-white/10 text-white text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
+              >
+                <Camera className="w-3.5 h-3.5" /> Interior
+              </button>
+              <button
+                onClick={() => {
+                  setFocusMachineId(null);
+                  setCameraPreset('overview');
+                  setCameraTrigger((t) => t + 1);
+                }}
+                className="py-2 px-2.5 rounded-xl bg-white/10 text-slate-200 text-xs font-semibold cursor-pointer flex items-center justify-center gap-1"
+              >
+                General
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Collapsible Phase Summary Card (Replaces the obstructive floating HUD box!) */}
+        <div className="rounded-2xl bg-white border border-[#E5DEC9] p-3.5 shadow-xs space-y-2">
+          <div className="flex items-start justify-between gap-2.5">
+            <div className="min-w-0 space-y-0.5">
+              <div className="flex items-center gap-1.5 text-[10px] font-mono-tech uppercase font-bold text-[#9A3412]">
+                <span>Cinemática ({Math.round(phaseProgress * 100)}%)</span>
+                <span>·</span>
+                <span className="text-[#1B4332]">ASME: {phase.asme}</span>
+              </div>
+              <div className="text-xs font-bold text-[#14181F] leading-snug">
+                {activeSubPhase.label}
+              </div>
+              {!mobileSummaryExpanded && (
+                <p className="text-[11px] text-[#5C554B] truncate">{phase.visualCaption}</p>
+              )}
+            </div>
+            <button
+              onClick={() => setMobileSummaryExpanded((e) => !e)}
+              className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#F3EFE6] hover:bg-[#E5DEC9] text-[#14181F] text-xs font-bold cursor-pointer"
+            >
+              <span>{mobileSummaryExpanded ? 'Ocultar' : 'Ver detalles'}</span>
+              {mobileSummaryExpanded ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+
+          {mobileSummaryExpanded && (
+            <div className="pt-2 border-t border-[#F3EFE6] space-y-2 text-xs">
+              <p className="text-[#181C23] leading-relaxed">
+                <strong className="text-[#9A3412]">Estado de la masa: </strong>
+                {phase.visualCaption}
+              </p>
+              <p className="text-[#5C554B] leading-relaxed">{phase.whatHappens}</p>
+              <div className="space-y-1 pt-1">
+                <span className="text-[10px] font-mono-tech uppercase font-bold text-[#5C554B] block">
+                  Sub-operaciones de la etapa (toca para saltar):
+                </span>
+                {phase3D.subPhases.map((sp, i) => {
+                  const isCurrent =
+                    phaseProgress >= sp.range[0] && phaseProgress <= sp.range[1];
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => setPhaseProgress(sp.range[0] + 0.05)}
+                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] flex items-center justify-between gap-2 cursor-pointer ${
+                        isCurrent
+                          ? 'bg-[#14181F] text-[#F4D06F] font-bold'
+                          : 'bg-[#FBF9F5] text-[#5C554B] border border-[#E5DEC9]'
+                      }`}
+                    >
+                      <span className="truncate">{sp.label}</span>
+                      <span className="font-mono-tech text-[10px] shrink-0">
+                        {Math.round(sp.range[0] * 100)}–{Math.round(sp.range[1] * 100)}%
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ==================== 3. MULTIMEDIA PLAYBACK DECK & TIMELINE (TOUCH-OPTIMIZED) ==================== */}
+      <div className="rounded-2xl bg-white border border-[#E5DEC9] p-3.5 sm:p-4 shadow-sm space-y-3.5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+          {/* Transport Buttons (Comfortable 44px touch height on mobile) */}
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => handleSelectPhase(Math.max(0, activeIndex - 1))}
               disabled={activeIndex === 0}
-              className="p-2.5 rounded-xl border border-[#E5DEC9] hover:bg-[#F3EFE6] disabled:opacity-40 cursor-pointer"
+              className="min-h-[42px] min-w-[42px] sm:min-h-0 sm:min-w-0 p-2.5 rounded-xl border border-[#E5DEC9] hover:bg-[#F3EFE6] disabled:opacity-40 cursor-pointer flex items-center justify-center"
               title="Etapa anterior"
               aria-label="Etapa anterior"
             >
@@ -783,7 +940,7 @@ export const ProcessTourView: React.FC<Props> = ({
 
             <button
               onClick={handleTogglePlay}
-              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition cursor-pointer ${
+              className={`min-h-[42px] flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition cursor-pointer ${
                 isPlaying
                   ? 'bg-[#14181F] text-white hover:bg-[#252B37]'
                   : 'bg-gradient-to-r from-[#C87D20] to-[#B45309] text-white hover:opacity-95'
@@ -805,7 +962,7 @@ export const ProcessTourView: React.FC<Props> = ({
             <button
               onClick={() => handleSelectPhase(Math.min(PHASES_DATA.length - 1, activeIndex + 1))}
               disabled={activeIndex === PHASES_DATA.length - 1}
-              className="p-2.5 rounded-xl border border-[#E5DEC9] hover:bg-[#F3EFE6] disabled:opacity-40 cursor-pointer"
+              className="min-h-[42px] min-w-[42px] sm:min-h-0 sm:min-w-0 p-2.5 rounded-xl border border-[#E5DEC9] hover:bg-[#F3EFE6] disabled:opacity-40 cursor-pointer flex items-center justify-center"
               title="Siguiente etapa"
               aria-label="Siguiente etapa"
             >
@@ -818,7 +975,7 @@ export const ProcessTourView: React.FC<Props> = ({
                 onChangeIndex(0);
                 setPhaseProgress(0);
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-[#E5DEC9] hover:bg-[#F3EFE6] text-xs font-semibold text-[#5C554B] cursor-pointer"
+              className="min-h-[42px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-[#E5DEC9] hover:bg-[#F3EFE6] text-xs font-semibold text-[#5C554B] cursor-pointer"
               title="Reiniciar recorrido a Fase 1"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -827,7 +984,7 @@ export const ProcessTourView: React.FC<Props> = ({
 
             <button
               onClick={() => setAutoAdvance((a) => !a)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+              className={`min-h-[42px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
                 autoAdvance
                   ? 'bg-[#1B4332]/10 border-[#1B4332]/30 text-[#1B4332]'
                   : 'bg-[#FBF9F5] border-[#E5DEC9] text-[#5C554B]'
@@ -835,15 +992,15 @@ export const ProcessTourView: React.FC<Props> = ({
               title="Alternar entre avance continuo de las 18 fases o bucle en la fase actual"
             >
               <Repeat className="w-3.5 h-3.5" />
-              <span>{autoAdvance ? 'Secuencia 1–18' : 'Repetir fase'}</span>
+              <span>{autoAdvance ? '1–18' : 'Bucle'}</span>
             </button>
           </div>
 
-          {/* Intra-Phase Progress Scrubber with Sub-Phase Markers */}
-          <div className="flex-1 max-w-md space-y-1">
+          {/* Intra-Phase Progress Scrubber */}
+          <div className="flex-1 max-w-md space-y-1.5">
             <div className="flex items-center justify-between text-[11px]">
               <span className="font-bold text-[#14181F] truncate">
-                Cinemática (Fase {phase.id}): {activeSubPhase.label}
+                Progreso Fase {phase.id}:
               </span>
               <span className="font-mono-tech font-bold text-[#9A3412] shrink-0 ml-2">
                 {Math.round(phaseProgress * 100)}% · Global: {overallProgressPct}%
@@ -859,38 +1016,64 @@ export const ProcessTourView: React.FC<Props> = ({
                 setPhaseProgress(Number(e.target.value));
               }}
               aria-label="Progreso de transformación de la fase actual"
-              className="w-full accent-[#C87D20] cursor-pointer h-2 rounded-lg"
+              className="w-full accent-[#C87D20] cursor-pointer h-2.5 rounded-lg"
             />
           </div>
 
-          {/* 5 Playback Speeds Selector (0.25x, 0.5x, 1x, 2x, 4x) */}
-          <div className="flex items-center gap-1 text-xs shrink-0">
+          {/* 5 Playback Speeds Selector */}
+          <div className="flex items-center justify-between sm:justify-start gap-1 text-xs shrink-0">
             <span className="text-[#5C554B] font-semibold mr-1">Velocidad:</span>
-            {[0.25, 0.5, 1, 2, 4].map((sp) => (
-              <button
-                key={sp}
-                onClick={() => setSpeed(sp)}
-                className={`px-2.5 py-1.5 rounded-xl font-mono-tech font-bold border transition cursor-pointer ${
-                  speed === sp
-                    ? 'bg-[#14181F] text-white border-[#14181F]'
-                    : 'bg-[#FBF9F5] text-[#5C554B] border-[#E5DEC9] hover:bg-[#F3EFE6]'
-                }`}
-              >
-                {sp}x
-              </button>
-            ))}
+            <div className="flex items-center gap-1">
+              {[0.25, 0.5, 1, 2, 4].map((sp) => (
+                <button
+                  key={sp}
+                  onClick={() => setSpeed(sp)}
+                  className={`min-h-[36px] px-2.5 py-1.5 rounded-xl font-mono-tech font-bold border transition cursor-pointer ${
+                    speed === sp
+                      ? 'bg-[#14181F] text-white border-[#14181F]'
+                      : 'bg-[#FBF9F5] text-[#5C554B] border-[#E5DEC9] hover:bg-[#F3EFE6]'
+                  }`}
+                >
+                  {sp}x
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Master 18-Phase Interactive Timeline Grid */}
-        <div className="pt-2 border-t border-[#F3EFE6] space-y-1.5">
-          <div className="flex items-center justify-between text-[11px] text-[#5C554B]">
+        {/* Mobile Quick Phase Dropdown + Desktop 18-Phase Interactive Grid */}
+        <div className="pt-2.5 border-t border-[#F3EFE6] space-y-2">
+          {/* Mobile Direct Phase Dropdown for instant 1-thumb selection */}
+          <div className="sm:hidden flex items-center gap-2">
+            <label
+              htmlFor="mobile-phase-select"
+              className="text-xs font-bold text-[#14181F] shrink-0"
+            >
+              Etapa:
+            </label>
+            <select
+              id="mobile-phase-select"
+              value={activeIndex}
+              onChange={(e) => handleSelectPhase(Number(e.target.value))}
+              className="w-full px-3 py-2 rounded-xl border border-[#E5DEC9] bg-[#FBF9F5] text-xs font-bold text-[#14181F]"
+            >
+              {PHASES_DATA.map((pItem, idx) => (
+                <option key={pItem.id} value={idx}>
+                  Fase {pItem.id}/18: {pItem.name} ({pItem.zone})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Horizontal swipe phase pills on mobile, 2-row 9-col grid on desktop */}
+          <div className="hidden sm:flex items-center justify-between text-[11px] text-[#5C554B]">
             <span className="font-semibold">
               Línea de tiempo maestro (18 etapas sincronizadas con cámara, maquinaria y masa)
             </span>
             <span className="font-mono-tech">{visitedPhases.length} de 18 fases visitadas</span>
           </div>
-          <div className="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-9 gap-1.5">
+
+          <div className="flex sm:grid sm:grid-cols-6 lg:grid-cols-9 gap-1.5 overflow-x-auto no-scrollbar pb-0.5">
             {PHASES_DATA.map((pItem, idx) => {
               const isActive = idx === activeIndex;
               const isVisited = visitedPhases.includes(pItem.id);
@@ -899,7 +1082,7 @@ export const ProcessTourView: React.FC<Props> = ({
                   key={pItem.id}
                   onClick={() => handleSelectPhase(idx)}
                   title={`Fase ${pItem.id}: ${pItem.name}`}
-                  className={`px-2 py-2 rounded-xl text-[11px] font-semibold border transition cursor-pointer flex flex-col justify-between text-left ${
+                  className={`shrink-0 w-28 sm:w-auto px-2.5 py-2 rounded-xl text-[11px] font-semibold border transition cursor-pointer flex flex-col justify-between text-left ${
                     isActive
                       ? 'bg-[#14181F] text-white border-[#14181F] ring-2 ring-[#C87D20] shadow-xs'
                       : isVisited
@@ -929,6 +1112,42 @@ export const ProcessTourView: React.FC<Props> = ({
             })}
           </div>
         </div>
+      </div>
+
+      {/* ==================== 4. MOBILE EXPANDABLE BOTTOM TECHNICAL SHEET (< 1024px, Section 3.D) ==================== */}
+      <div className="lg:hidden rounded-2xl bg-white border border-[#E5DEC9] shadow-sm overflow-hidden">
+        <button
+          onClick={() => setMobileTechSheetOpen((o) => !o)}
+          className="w-full p-4 bg-[#F3EFE6]/80 flex items-center justify-between gap-3 text-left cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-2 rounded-xl bg-[#14181F] text-[#F4D06F] shrink-0">
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-[10px] font-mono-tech uppercase font-bold text-[#9A3412]">
+                Ficha Técnica · {phase.classification}
+              </div>
+              <div className="text-sm font-bold text-[#14181F] truncate">
+                {phase.id}. {phase.name}
+              </div>
+            </div>
+          </div>
+          <span className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white border border-[#E5DEC9] text-xs font-bold text-[#14181F]">
+            <span>{mobileTechSheetOpen ? 'Contraer' : 'Explorar 6 secciones'}</span>
+            {mobileTechSheetOpen ? (
+              <ChevronUp className="w-4 h-4" />
+            ) : (
+              <ChevronDown className="w-4 h-4" />
+            )}
+          </span>
+        </button>
+
+        {mobileTechSheetOpen && (
+          <div className="border-t border-[#E5DEC9] max-h-[460px] flex flex-col">
+            {renderTechnicalTabsContent()}
+          </div>
+        )}
       </div>
     </div>
   );

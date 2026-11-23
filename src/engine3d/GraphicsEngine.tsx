@@ -1,5 +1,5 @@
 import React, { Component, Suspense, useEffect, useRef, useState } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { BakeryEnvironment } from './BakeryEnvironment';
 import { BakeryLighting } from './BakeryLighting';
@@ -34,6 +34,8 @@ interface Props {
   phaseProgress?: number;
   showCrumbCut?: boolean;
   onFpsSample?: (fps: number) => void;
+  activeHotspot?: HotspotInfo | null;
+  onSelectHotspot?: (hs: HotspotInfo | null) => void;
 }
 
 class CanvasErrorBoundary extends Component<
@@ -70,6 +72,34 @@ const FpsSampler: React.FC<{ onSample?: (fps: number) => void }> = ({ onSample }
   return null;
 };
 
+/**
+ * Ensures WebGL renderer and camera projection update cleanly when mobile panels expand/collapse or device orientation changes.
+ */
+const ViewportResizeSync: React.FC<{ containerRef: React.RefObject<HTMLDivElement | null> }> = ({
+  containerRef,
+}) => {
+  const { gl, camera } = useThree();
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          gl.setSize(width, height, false);
+          if ('aspect' in camera) {
+            (camera as THREE.PerspectiveCamera).aspect = width / height;
+            camera.updateProjectionMatrix();
+          }
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [containerRef, gl, camera]);
+  return null;
+};
+
 function detectWebGL(): boolean {
   try {
     const canvas = document.createElement('canvas');
@@ -102,11 +132,18 @@ export const GraphicsEngine: React.FC<Props> = ({
   phaseProgress,
   showCrumbCut = false,
   onFpsSample,
+  activeHotspot: controlledHotspot,
+  onSelectHotspot: onControlledHotspot,
 }) => {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [webglOk, setWebglOk] = useState<boolean>(true);
   const [isTabVisible, setIsTabVisible] = useState<boolean>(true);
-  const [activeHotspot, setActiveHotspot] = useState<HotspotInfo | null>(null);
+  const [internalHotspot, setInternalHotspot] = useState<HotspotInfo | null>(null);
   const trackedProductPosRef = useRef<THREE.Vector3>(new THREE.Vector3(-10.05, 0.22, -1.45));
+
+  const activeHotspot =
+    controlledHotspot !== undefined ? controlledHotspot : internalHotspot;
+  const setActiveHotspot = onControlledHotspot || setInternalHotspot;
 
   useEffect(() => {
     setWebglOk(detectWebGL());
@@ -145,7 +182,10 @@ export const GraphicsEngine: React.FC<Props> = ({
 
   return (
     <CanvasErrorBoundary fallback={fallbackNode}>
-      <div className="relative w-full h-full overflow-hidden bg-[#E5E0D6]">
+      <div
+        ref={wrapperRef}
+        className="relative w-full h-full overflow-hidden bg-[#E5E0D6] touch-none select-none"
+      >
         <Canvas
           shadows={quality !== 'low'}
           dpr={dpr}
@@ -165,6 +205,7 @@ export const GraphicsEngine: React.FC<Props> = ({
           <fog attach="fog" args={['#E7E2D8', 24, 54]} />
 
           <Suspense fallback={null}>
+            <ViewportResizeSync containerRef={wrapperRef} />
             <FpsSampler onSample={onFpsSample} />
             <BakeryLighting
               quality={quality}
@@ -213,9 +254,9 @@ export const GraphicsEngine: React.FC<Props> = ({
           </Suspense>
         </Canvas>
 
-        {/* Active Hotspot Detail Overlay outside Canvas */}
+        {/* Desktop-Only Hotspot Detail Overlay inside Canvas (On mobile <1024px it renders in the panel BELOW the canvas so it never blocks the 3D scene!) */}
         {activeHotspot && showHotspots && (
-          <div className="absolute bottom-16 left-3 z-20 max-w-xs rounded-xl bg-[#14181F]/95 text-[#FBF9F5] p-3.5 text-xs shadow-2xl border border-[#C87D20] backdrop-blur-md">
+          <div className="hidden lg:block absolute bottom-16 left-3 z-20 max-w-xs rounded-xl bg-[#14181F]/95 text-[#FBF9F5] p-3.5 text-xs shadow-2xl border border-[#C87D20] backdrop-blur-md">
             <div className="flex items-center justify-between gap-3 mb-1">
               <span className="font-bold text-[#F4D06F]">{activeHotspot.label}</span>
               <button

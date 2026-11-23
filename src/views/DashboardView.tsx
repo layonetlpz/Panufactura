@@ -197,20 +197,20 @@ export const DashboardView: React.FC<Props> = ({
                   focusMachineId={null}
                   showHotspots={false}
                 />
-                <div className="absolute bottom-2.5 left-2.5 right-2.5 rounded-lg bg-[#14181F]/90 backdrop-blur-md px-3 py-2 border border-white/10 flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-mono-tech uppercase text-[#F4D06F]">
-                      Estación Activa · Fase {heroPhase.id}/18
-                    </div>
-                    <div className="text-xs font-bold text-white truncate">{heroPhase.name}</div>
+              </div>
+              <div className="rounded-xl bg-[#14181F]/90 px-3.5 py-2.5 border border-white/10 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[10px] font-mono-tech uppercase text-[#F4D06F]">
+                    Estación Activa · Fase {heroPhase.id}/18
                   </div>
-                  <button
-                    onClick={() => onNavigate('tour', heroPreviewPhaseId - 1)}
-                    className="shrink-0 px-2.5 py-1 rounded-md bg-[#C87D20] hover:bg-[#B45309] text-white text-[11px] font-bold cursor-pointer"
-                  >
-                    Abrir en 3D →
-                  </button>
+                  <div className="text-xs font-bold text-white truncate">{heroPhase.name}</div>
                 </div>
+                <button
+                  onClick={() => onNavigate('tour', heroPreviewPhaseId - 1)}
+                  className="shrink-0 px-3 py-1.5 rounded-lg bg-[#C87D20] hover:bg-[#B45309] text-white text-xs font-bold cursor-pointer"
+                >
+                  Abrir en 3D →
+                </button>
               </div>
             </div>
           </div>
